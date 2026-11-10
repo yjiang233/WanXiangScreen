@@ -1,11 +1,13 @@
 package com.wanxiang.screen.compat.ae2;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import appeng.api.implementations.blockentities.IChestOrDrive;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.security.IActionHost;
@@ -14,10 +16,14 @@ import appeng.api.stacks.AmountFormat;
 import appeng.api.stacks.KeyCounter;
 
 import com.wanxiang.screen.ChunkTracker;
+import com.wanxiang.screen.WanXiangScreen;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -27,10 +33,10 @@ public final class Ae2GridScanner
 
     private Ae2GridScanner() {}
 
-    // 只允许在服务端主线程调用
     public static List<Map<String, Object>> scan(MinecraftServer server)
     {
         Map<IGrid, Boolean> grids = new IdentityHashMap<>();
+        Map<IGrid, List<Map<String, Object>>> drives = new IdentityHashMap<>();
         for (LevelChunk chunk : ChunkTracker.copy())
         {
             for (BlockEntity blockEntity : chunk.getBlockEntities().values())
@@ -41,6 +47,10 @@ public final class Ae2GridScanner
                 IGrid grid = node.getGrid();
                 if (grid == null || grid.isEmpty()) continue;
                 grids.putIfAbsent(grid, Boolean.TRUE);
+                if (blockEntity instanceof IChestOrDrive drive)
+                {
+                    drives.computeIfAbsent(grid, key -> new ArrayList<>()).add(readDrive(drive, blockEntity));
+                }
             }
         }
 
@@ -48,13 +58,104 @@ public final class Ae2GridScanner
         int index = 0;
         for (IGrid grid : grids.keySet())
         {
-            try { result.add(readGrid(grid, "grid-" + (++index))); }
-            catch (Throwable t) { com.wanxiang.screen.WanXiangScreen.LOGGER.warn("读取单个 ME 网络失败", t); }
+            try { result.add(readGrid(grid, "grid-" + (++index), drives.getOrDefault(grid, List.of()))); }
+            catch (Throwable t) { WanXiangScreen.LOGGER.warn("读取单个 ME 网络失败", t); }
         }
         return result;
     }
 
-    private static Map<String, Object> readGrid(IGrid grid, String id)
+    private static Map<String, Object> readDrive(IChestOrDrive drive, BlockEntity blockEntity)
+    {
+        Map<String, Object> info = new LinkedHashMap<>();
+        try { info.put("block", BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock()).toString()); }
+        catch (Throwable ignored) { info.put("block", ""); }
+        BlockPos pos = blockEntity.getBlockPos();
+        info.put("pos", new long[] { pos.getX(), pos.getY(), pos.getZ() });
+        try { info.put("dimension", blockEntity.getLevel().dimension().location().toString()); }
+        catch (Throwable ignored) { info.put("dimension", "unknown"); }
+        try { info.put("powered", drive.isPowered()); }
+        catch (Throwable ignored) { info.put("powered", false); }
+        long priority = longOf(blockEntity, "getPriority");
+        if (priority >= 0) info.put("priority", priority);
+
+        int slots = 10;
+        try { slots = drive.getCellCount(); } catch (Throwable ignored) {}
+        List<Map<String, Object>> cells = new ArrayList<>();
+        for (int i = 0; i < slots; i++)
+        {
+            Map<String, Object> cell = new LinkedHashMap<>();
+            cell.put("slot", i);
+            try { cell.put("state", drive.getCellStatus(i).name()); }
+            catch (Throwable ignored) { cell.put("state", "ABSENT"); }
+            try { cell.put("blinking", drive.isCellBlinking(i)); }
+            catch (Throwable ignored) { cell.put("blinking", false); }
+            try
+            {
+                Item item = drive.getCellItem(i);
+                if (item != null)
+                {
+                    cell.put("id", BuiltInRegistries.ITEM.getKey(item).toString());
+                    cell.put("name", new ItemStack(item).getHoverName().getString());
+                    Object inventory = drive.getOriginalCellInventory(i);
+                    long used = longOf(inventory, "getUsedBytes");
+                    long total = longOf(inventory, "getTotalBytes");
+                    long types = longOf(inventory, "getStoredItemTypes");
+                    long count = longOf(inventory, "getStoredItemCount");
+                    if (used < 0 || count < 0)
+                    {
+                        try
+                        {
+                            KeyCounter stacks = drive.getCellInventory(i).getAvailableStacks();
+                            long sum = 0, kinds = 0;
+                            for (var entry : stacks)
+                            {
+                                if (entry.getKey() != null && entry.getLongValue() > 0)
+                                {
+                                    kinds++;
+                                    sum += entry.getLongValue();
+                                }
+                            }
+                            if (types < 0) types = kinds;
+                            if (count < 0) count = sum;
+                        }
+                        catch (Throwable ignored) {}
+                    }
+                    if (used >= 0) cell.put("usedBytes", used);
+                    if (total >= 0) cell.put("totalBytes", total);
+                    if (types >= 0) cell.put("types", types);
+                    if (count >= 0) cell.put("count", count);
+                }
+            }
+            catch (Throwable t) { WanXiangScreen.LOGGER.warn("读取驱动器槽位 {} 失败", i, t); }
+            cells.add(cell);
+        }
+        info.put("cells", cells);
+        return info;
+    }
+
+    private static long longOf(Object target, String method)
+    {
+        if (target == null) return -1;
+        try
+        {
+            Method m = target.getClass().getMethod(method);
+            Object value = m.invoke(target);
+            return value instanceof Number number ? number.longValue() : -1;
+        }
+        catch (Throwable ignored)
+        {
+            try
+            {
+                Method m = target.getClass().getDeclaredMethod(method);
+                m.setAccessible(true);
+                Object value = m.invoke(target);
+                return value instanceof Number number ? number.longValue() : -1;
+            }
+            catch (Throwable ignored2) { return -1; }
+        }
+    }
+
+    private static Map<String, Object> readGrid(IGrid grid, String id, List<Map<String, Object>> drives)
     {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("id", id);
@@ -119,6 +220,7 @@ public final class Ae2GridScanner
         info.put("totalTypes", entries.size());
         info.put("totalAmount", totalAmount);
         info.put("entries", entries.size() > MAX_ENTRIES ? entries.subList(0, MAX_ENTRIES) : entries);
+        info.put("drives", drives);
         return info;
     }
 }

@@ -29,6 +29,9 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 | `/api/ae2/inventory` | AE2 数据别名 |
 | `/api/health` | 健康检查 |
 
+`data.ae2` 含 `grids[]`（每格的 `entries[]` 库存与 `drives[]` 驱动器）、`drives` 总数、
+`cellSummary` 元件汇总。`drives[].cells[]` 给出槽位状态、元件 ID、已用/总字节、种类数、物品数。
+
 配置在 `<游戏目录>/config/wanxiangscreen-common.toml`：`token`（鉴权，空=不校验）、
 `watchedMods`（关注的模组 ID）、`simulateMissing`（模拟依赖未安装）、`refreshTicks`（快照间隔，默认 20 tick）。
 配置文件改动会热更新，无需重启游戏。
@@ -46,7 +49,9 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 ```
 
 把创造能源、驱动器用电缆连起来，存储元件放进驱动器，终端贴在电缆上即可。
-看板会每秒刷新库存；数量变化的行会高亮。
+看板按 AE2 终端 GUI 的槽位网格显示库存，图标取自游戏资源，右下角是数量角标；
+ME 驱动器面板显示 10 个槽位、元件图标、状态灯与容量条，并在上方汇总「多少个什么元件」。
+数量变化的格子会高亮，鼠标悬停可看完整名称、ID、容量与状态。
 
 验证「未安装AE2」有两种方式：
 
@@ -60,8 +65,32 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 | `src/main/java/com/wanxiang/screen` | 模组主体，与具体联动模组无关 |
 | `src/main/java/com/wanxiang/screen/compat/ae2` | AE2 联动实现，仅在检测到 AE2 时加载 |
 | `dashboard/` | 网页看板，模组会从游戏目录向上自动定位并托管 |
+| `dashboard/assets/` | AE2 GUI 贴图、物品图标、中文名映射 |
+| `tools/extract_assets.py` | 从 AE2 / MC 资源 jar 重新生成上述资源 |
+| `tools/verify_dashboard.js` | 看板渲染自检，可模拟驱动器数据与未安装分支 |
 | `libs/` | 第三方模组 jar，来源见 `libs/README.md` |
 | `local-maven/` | 补齐官方镜像缺失的 POM，勿删 |
+
+## 图标与 GUI 资源
+
+`dashboard/assets/` 全部提取自本地官方 jar，看板运行时不依赖外网：
+
+- `gui/` — AE2 的 `terminal.png`、`drive.png`、`states.png` 等；`slot.png` 是从终端 GUI 精确裁出的 18×18 槽位底图
+- `tex/` — Minecraft 与 AE2 的物品 / 方块 / 部件贴图，配合模型 JSON 的 parent 链解析，共 2111 项映射
+- `icon-map.json` — 物品 ID → 贴图路径；`lang-zh.json` — AE2 简体中文名
+
+升级 AE2 或 Minecraft 版本后重新生成：
+
+```bash
+python tools/extract_assets.py
+```
+
+看板渲染自检（无需进入游戏）：
+
+```bash
+node tools/verify_dashboard.js --mock-drive
+node tools/verify_dashboard.js --mock-missing
+```
 
 ## 增加联动模组
 
