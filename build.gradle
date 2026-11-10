@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'idea'
-    id 'net.neoforged.moddev' version '2.0.91'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
 version = mod_version
@@ -11,27 +11,21 @@ base {
     archivesName = mod_id
 }
 
+// JDK17 工具链在本机（中文用户名）fork Gradle worker 会因 argfile 编码问题起不来，
+// 所以编译统一用 JDK21（与 1.21.1 分支一致），代码层面用 release=17 保证产物兼容 Java 17
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
-    // 本地补丁仓库：补齐官方 CDN 镜像缺失的纯 POM 模块（minecraft-dependencies）
     maven {
-        name = 'LocalMaven'
-        url = uri("${rootDir}/local-maven")
-    }
-    // NeoForged 官方 CDN 镜像，国内可直连
-    maven {
-        name = 'NeoForged'
-        url = 'https://neoforged.forgecdn.net/releases'
+        name = 'MinecraftForge'
+        url = 'https://maven.minecraftforge.net'
     }
     maven {
         name = 'MinecraftLibraries'
         url = 'https://libraries.minecraft.net'
     }
-    maven {
-        name = 'Parchment'
-        url = 'https://maven.parchmentmc.org'
-    }
+    // 本地依赖仓库：AE2 15.4.12 / Mekanism 10.4 / Flux 7.2 的 1.20.1 jar
+    flatDir { dirs 'libs' }
     mavenCentral()
 }
 
@@ -43,28 +37,30 @@ def prepareNatives = tasks.register("prepareNatives") {
     doLast {
         def out = nativesDir.get().asFile
         out.mkdirs()
-        def cache = new File(System.getProperty("user.home"), ".gradle/caches/neoformruntime/artifacts/org/lwjgl")
-        if (!cache.isDirectory()) {
-            logger.warn("未找到 LWJGL natives 缓存: ${cache}")
-            return
-        }
+        def roots = [
+                new File(System.getProperty("user.home"), ".gradle/caches/modules-2/files-2.1/org.lwjgl"),
+                new File(System.getProperty("user.home"), ".gradle/caches/neoformruntime/artifacts/org/lwjgl")
+        ]
         def count = 0
-        cache.eachFileRecurse { File jar ->
-            if (!jar.name.endsWith("-natives-windows.jar")) return
-            new java.util.zip.ZipFile(jar).withCloseable { zip ->
-                def entries = zip.entries()
-                while (entries.hasMoreElements()) {
-                    def entry = entries.nextElement()
-                    if (entry.isDirectory() || !entry.name.endsWith(".dll")) continue
-                    def name = new File(entry.name).name
-                    def flat = new File(out, name)
-                    def nested = new File(out, "windows/x64/org/lwjgl/" + name)
-                    nested.parentFile.mkdirs()
-                    zip.getInputStream(entry).withCloseable { input ->
-                        flat.bytes = input.bytes
+        roots.each { root ->
+            if (!root.isDirectory()) return
+            root.eachFileRecurse { File jar ->
+                if (!jar.name.endsWith("-natives-windows.jar")) return
+                new java.util.zip.ZipFile(jar).withCloseable { zip ->
+                    def entries = zip.entries()
+                    while (entries.hasMoreElements()) {
+                        def entry = entries.nextElement()
+                        if (entry.isDirectory() || !entry.name.endsWith(".dll")) continue
+                        def name = new File(entry.name).name
+                        def flat = new File(out, name)
+                        def nested = new File(out, "windows/x64/org/lwjgl/" + name)
+                        nested.parentFile.mkdirs()
+                        zip.getInputStream(entry).withCloseable { input ->
+                            flat.bytes = input.bytes
+                        }
+                        nested.bytes = flat.bytes
+                        count++
                     }
-                    nested.bytes = flat.bytes
-                    count++
                 }
             }
         }
@@ -73,82 +69,51 @@ def prepareNatives = tasks.register("prepareNatives") {
 }
 tasks.matching { it.name.startsWith("run") }.configureEach { dependsOn prepareNatives }
 
-neoForge {
-    version = project.neo_version
-
-    parchment {
-        mappingsVersion = project.parchment_mappings_version
-        minecraftVersion = project.parchment_minecraft_version
-    }
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    copyIdeResources = true
 
     runs {
         client {
-            client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            workingDirectory project.file('run')
             // -PquickPlay=<存档名> 启动后直接进世界，便于自动化验证
             if (project.hasProperty('quickPlay')) {
-                programArguments.addAll '--quickPlaySingleplayer', project.property('quickPlay').toString()
+                args '--quickPlaySingleplayer', project.property('quickPlay').toString()
             }
+            property 'org.lwjgl.librarypath', nativesDir.get().asFile.absolutePath
+            mods { "${mod_id}" { source sourceSets.main } }
         }
 
         server {
-            server()
-            programArgument '--nogui'
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        }
-
-        data {
-            data()
-            programArguments.addAll '--mod', project.mod_id, '--all',
-                    '--output', file('src/generated/resources/').getAbsolutePath(),
-                    '--existing', file('src/main/resources/').getAbsolutePath()
-        }
-
-        configureEach {
-            logLevel = org.slf4j.event.Level.DEBUG
-            def lwjglCache = new File(System.getProperty("user.home"), ".gradle/caches/neoformruntime/artifacts/org/lwjgl")
-            if (lwjglCache.isDirectory()) {
-                systemProperty 'org.lwjgl.librarypath', nativesDir.get().asFile.absolutePath
-            }
-        }
-    }
-
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
+            workingDirectory project.file('run-server')
+            mods { "${mod_id}" { source sourceSets.main } }
         }
     }
 }
 
-sourceSets.main.resources { srcDir 'src/generated/resources' }
-
-configurations {
-    runtimeClasspath.extendsFrom localRuntime
-}
-
-// AE2 为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求
+// AE2 / Mekanism / Flux 均为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求。
+// 1.20.1 的发布 jar 是 SRG 映射，必须走 fg.deobf 才能在开发环境编译通过。
 dependencies {
-    compileOnly files("libs/appliedenergistics2-19.2.19.jar", "libs/Mekanism-1.21.1-10.7.19.85.jar",
-            "libs/FluxNetworks-1.21.1-8.0.0.jar")
-    // -PwithoutAe2 / -PwithoutMek / -PwithoutFlux 可启动真正缺少该依赖的环境，验证可选依赖降级
-    if (!project.hasProperty('withoutAe2')) {
-        localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
-    }
-    if (!project.hasProperty('withoutMek')) {
-        localRuntime files("libs/Mekanism-1.21.1-10.7.19.85.jar")
-    }
-    if (!project.hasProperty('withoutFlux')) {
-        localRuntime files("libs/FluxNetworks-1.21.1-8.0.0.jar")
-    }
+    minecraft "net.minecraftforge:forge:1.20.1-${forge_version}"
+    implementation fg.deobf("blank:appliedenergistics2-1.20.1-forge:15.4.12")
+    // AE2 15 硬依赖 GuideME，开发运行时必须带上
+    implementation fg.deobf("blank:guideme-1.20.1:20.1.15")
+    implementation fg.deobf("blank:Mekanism-1.20.1:10.4.16.80")
+    implementation fg.deobf("blank:FluxNetworks-1.20.1:7.2.0.14")
 }
 
-var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
-    var replaceProperties = [
-            minecraft_version      : minecraft_version,
-            minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
-            neo_version_range      : neo_version_range,
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+    options.compilerArgs << '-Xlint:deprecation'
+}
+
+// 网页看板打进 jar：发布出去别人拿到 jar 也能直接开看板
+// mods.toml 模板也在这里展开（FG6 没有 NeoForge 的 generateModMetadata 任务）
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
             loader_version_range   : loader_version_range,
+            minecraft_version_range: minecraft_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,
@@ -157,20 +122,10 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_description        : mod_description
     ]
     inputs.properties replaceProperties
-    expand replaceProperties
-    from "src/main/templates"
-    into "build/generated/sources/modMetadata"
-}
-sourceSets.main.resources.srcDir generateModMetadata
-neoForge.ideSyncTask generateModMetadata
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.compilerArgs << '-Xlint:deprecation'
-}
-
-// 网页看板打进 jar：发布出去别人拿到 jar 也能直接开看板
-tasks.named('processResources', ProcessResources).configure {
+    from('src/main/templates/META-INF') {
+        into 'META-INF'
+        expand replaceProperties
+    }
     from('dashboard') {
         into 'dashboard'
         exclude '**/*.map', '**/.DS_Store'
