@@ -24,3 +24,5 @@ runs
 run-data
 
 repo
+# 本地放置的第三方模组 jar（体积大，不入库）
+libs/*.jar

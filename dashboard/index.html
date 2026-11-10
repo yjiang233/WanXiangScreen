@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>万象屏</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">万</div>
+      <h1>万象屏</h1>
+    </div>
+    <div class="topmeta">
+      <span id="conn" class="conn"><i></i><span>连接中</span></span>
+      <span id="updated" class="updated">—</span>
+      <span id="modcount" class="updated"></span>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="modules" id="modules"></section>
+  <section class="content" id="content"></section>
+  <section class="detected" id="detected"></section>
+
+  <footer class="footer">
+    <span id="endpoint"></span>
+    <span>WanXiangScreen · 可选依赖联动</span>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

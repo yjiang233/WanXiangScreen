@@ -85,6 +85,14 @@ description='''${mod_description}'''
     ordering="NONE"
     side="BOTH"
 
+# 可选联动：装了才启用对应数据模块，没装时看板显示「未安装」
+[[dependencies.${mod_id}]]
+    modId="ae2"
+    type="optional"
+    versionRange="[19.0.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
 # Features are specific properties of the game environment, that you may want to declare you require. This example declares
 # that your mod requires GL version 3.2 or higher. Other features will be added. They are side aware so declaring this won't
 # stop your mod loading on the server for example.

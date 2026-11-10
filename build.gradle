@@ -80,6 +80,12 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+// AE2 为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求
+dependencies {
+    compileOnly files("libs/appliedenergistics2-19.2.19.jar")
+    localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
+}
+
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
