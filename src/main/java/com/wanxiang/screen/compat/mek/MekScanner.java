@@ -35,6 +35,9 @@ public final class MekScanner
 {
     private static final int MAX_MACHINES = 500;
 
+    // 超过这个量级（单位 J，约 4e15 FE）只可能来自创造模式能源，正常储能到不了
+    private static final double INFINITE_ENERGY = 1.0e16;
+
     private static final String[][] CATEGORY_RULES = {
             {"factory", "工厂机器", "_factory"},
             {"reactor", "核反应堆", "reactor"},
@@ -143,7 +146,7 @@ public final class MekScanner
             machine.put("progress", value);
         }
 
-        readEnergy(tile, machine);
+        readEnergy(tile, machine, id);
         readItems(tile, machine);
         readFluids(tile, machine);
         readChemicals(tile, machine);
@@ -152,26 +155,43 @@ public final class MekScanner
         return machine;
     }
 
-    private static void readEnergy(TileEntityMekanism tile, Map<String, Object> machine)
+    private static void readEnergy(TileEntityMekanism tile, Map<String, Object> machine, String id)
     {
         try
         {
-            long stored = 0, max = 0;
+            // 用 double 累加，避免创造设备的 Long.MAX_VALUE 直接相加溢出成负数
+            double stored = 0, max = 0;
             for (IEnergyContainer container : tile.getEnergyContainers(null))
             {
                 if (container == null) continue;
-                stored += container.getEnergy();
-                max += container.getMaxEnergy();
+                stored += (double) container.getEnergy();
+                max += (double) container.getMaxEnergy();
             }
-            if (max > 0)
+            if (max <= 0) return;
+
+            Map<String, Object> value = new LinkedHashMap<>();
+            if (isInfiniteSource(id, stored, max))
             {
-                Map<String, Object> value = new LinkedHashMap<>();
-                value.put("stored", stored);
-                value.put("max", max);
-                machine.put("energy", value);
+                // 创造能量立方等无上限能源不计入统计，只标记出来供界面显示「无限」
+                value.put("stored", 0);
+                value.put("max", 0);
+                value.put("infinite", true);
             }
+            else
+            {
+                value.put("stored", Math.round(stored));
+                value.put("max", Math.round(max));
+            }
+            machine.put("energy", value);
         }
         catch (Throwable ignored) {}
+    }
+
+    // 名称带 creative_，或容量远超任何正常储能，都视为无限能源
+    private static boolean isInfiniteSource(String id, double stored, double max)
+    {
+        return id != null && (id.contains("creative_") || id.contains(":creative"))
+                || stored >= INFINITE_ENERGY || max >= INFINITE_ENERGY;
     }
 
     private static void readItems(TileEntityMekanism tile, Map<String, Object> machine)
