@@ -1,6 +1,7 @@
 package com.wanxiang.screen.compat.ae2;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,9 @@ import net.minecraft.server.MinecraftServer;
 
 public final class Ae2Module implements ScreenModule
 {
+    private long lastTick = -1;
+    private Map<String, Long> lastAmounts = Map.of();
+
     @Override
     public Map<String, Object> snapshot(MinecraftServer server)
     {
@@ -20,6 +24,7 @@ public final class Ae2Module implements ScreenModule
         try
         {
             List<Map<String, Object>> grids = Ae2GridScanner.scan(server);
+            applyRates(grids, server);
             out.put("grids", grids);
             out.put("drives", countDrives(grids));
             out.put("cellSummary", summarizeCells(grids));
@@ -35,6 +40,47 @@ public final class Ae2Module implements ScreenModule
         }
         out.put("updatedAt", System.currentTimeMillis());
         return out;
+    }
+
+    // 按采样周期做差分，得到每种物品每 tick 的净变化，用于详情面板的吞吐量
+    private void applyRates(List<Map<String, Object>> grids, MinecraftServer server)
+    {
+        Map<String, Long> now = new HashMap<>();
+        for (Map<String, Object> grid : grids)
+        {
+            if (!(grid.get("entries") instanceof List<?> entries)) continue;
+            for (Object raw : entries)
+            {
+                if (!(raw instanceof Map<?, ?> entry)) continue;
+                Object id = entry.get("id");
+                if (id == null || !(entry.get("amount") instanceof Number amount)) continue;
+                now.merge(id.toString(), amount.longValue(), Long::sum);
+            }
+        }
+
+        long tick = server == null ? 0 : server.getTickCount();
+        double delta = tick - lastTick;
+        boolean comparable = lastTick >= 0 && delta > 0;
+
+        for (Map<String, Object> grid : grids)
+        {
+            if (!(grid.get("entries") instanceof List<?> entries)) continue;
+            for (Object raw : entries)
+            {
+                if (!(raw instanceof Map)) continue;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> entry = (Map<String, Object>) raw;
+                Object id = entry.get("id");
+                if (id == null || !(entry.get("amount") instanceof Number amount)) continue;
+                Long previous = lastAmounts.get(id.toString());
+                double rate = 0;
+                if (comparable && previous != null) rate = (amount.longValue() - previous) / delta;
+                entry.put("rate", Math.round(rate * 100) / 100.0);
+            }
+        }
+
+        lastTick = tick;
+        lastAmounts = now;
     }
 
     private static int countDrives(List<Map<String, Object>> grids)

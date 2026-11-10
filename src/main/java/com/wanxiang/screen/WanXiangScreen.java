@@ -26,6 +26,7 @@ public class WanXiangScreen
 
     public WanXiangScreen(IEventBus modEventBus, ModContainer container)
     {
+        ErrorLog.install();
         container.registerConfig(ModConfig.Type.COMMON, ScreenConfig.SPEC);
         modEventBus.addListener((ModConfigEvent event) -> ScreenConfig.reload());
         NeoForge.EVENT_BUS.register(this);
@@ -48,6 +49,7 @@ public class WanXiangScreen
     @SubscribeEvent
     public void onServerTick(ServerTickEvent.Post event)
     {
+        ServerThread.drain();
         ScreenState.tick(event.getServer());
     }
 
