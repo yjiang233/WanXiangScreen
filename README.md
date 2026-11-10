@@ -26,6 +26,7 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 `-PwithoutAe2` / `-PwithoutMek` 可分别启动缺少该依赖的环境，验证降级分支。
 
 进入世界后打开 <http://127.0.0.1:18765/>；也可直接双击 `dashboard/index.html`。
+页面加载 `app.js` / `style.css` 时自动附加时间戳版本号，改前端后刷新页面即生效，无需清缓存或重启游戏。
 只监听 `127.0.0.1`；端口被占用时自动顺延到 18766~18768，实际端口写在
 `<游戏目录>/wanxiangscreen.port`，看板可用 `?api=http://127.0.0.1:18766` 指定。
 固定换端口用 JVM 参数 `-Dwanxiangscreen.port=9000`。

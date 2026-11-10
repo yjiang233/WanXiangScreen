@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>万象屏</title>
-<link rel="stylesheet" href="style.css">
+<script>
+  const assetVersion = Date.now();
+  const css = document.createElement('link');
+  css.rel = 'stylesheet';
+  css.href = 'style.css?v=' + assetVersion;
+  document.head.appendChild(css);
+</script>
 </head>
 <body>
 <div class="app">
@@ -17,6 +23,10 @@
   <div id="detected" class="detected"></div>
 </div>
 <div id="tip" class="tip hidden"></div>
-<script src="app.js"></script>
+<script>
+  const app = document.createElement('script');
+  app.src = 'app.js?v=' + assetVersion;
+  document.body.appendChild(app);
+</script>
 </body>
 </html>
