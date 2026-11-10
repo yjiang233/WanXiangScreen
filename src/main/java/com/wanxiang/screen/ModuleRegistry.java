@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.server.MinecraftServer;
-import net.neoforged.fml.ModList;
-import net.neoforged.neoforgespi.language.IModInfo;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.forgespi.language.IModInfo;
 
 public final class ModuleRegistry
 {

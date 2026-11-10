@@ -21,6 +21,10 @@ import mekanism.common.lib.multiblock.IMultiblock;
 import mekanism.common.lib.multiblock.MultiblockData;
 import mekanism.common.recipe.lookup.IRecipeLookupHandler;
 import mekanism.common.tile.base.TileEntityMekanism;
+import mekanism.common.tile.interfaces.chemical.IGasTile;
+import mekanism.common.tile.interfaces.chemical.IInfusionTile;
+import mekanism.common.tile.interfaces.chemical.IPigmentTile;
+import mekanism.common.tile.interfaces.chemical.ISlurryTile;
 import mekanism.common.tile.prefab.TileEntityProgressMachine;
 
 import net.minecraft.core.BlockPos;
@@ -29,7 +33,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.neoforged.neoforge.fluids.FluidStack;
+import net.minecraftforge.fluids.FluidStack;
 
 public final class MekScanner
 {
@@ -164,8 +168,8 @@ public final class MekScanner
             for (IEnergyContainer container : tile.getEnergyContainers(null))
             {
                 if (container == null) continue;
-                stored += (double) container.getEnergy();
-                max += (double) container.getMaxEnergy();
+                stored += container.getEnergy().doubleValue();
+                max += container.getMaxEnergy().doubleValue();
             }
             if (max <= 0) return;
 
@@ -277,20 +281,25 @@ public final class MekScanner
     {
         try
         {
-            List<IChemicalTank> tanks = tile.getChemicalTanks(null);
+            // 10.4 没有统一的 getChemicalTanks，四类化学品各自一个列表（TileEntityMekanism 恒实现四个接口，直接强转）
+            List<IChemicalTank<?, ?>> tanks = new ArrayList<>();
+            tanks.addAll(((IGasTile) tile).getGasTanks(null));
+            tanks.addAll(((IInfusionTile) tile).getInfusionTanks(null));
+            tanks.addAll(((IPigmentTile) tile).getPigmentTanks(null));
+            tanks.addAll(((ISlurryTile) tile).getSlurryTanks(null));
             long amount = 0, capacity = 0;
             String first = null;
-            for (IChemicalTank tank : tanks)
+            for (IChemicalTank<?, ?> tank : tanks)
             {
                 if (tank == null) continue;
                 amount += tank.getStored();
                 capacity += tank.getCapacity();
                 if (first == null)
                 {
-                    ChemicalStack stack = tank.getStack();
+                    ChemicalStack<?> stack = tank.getStack();
                     if (stack != null && !stack.isEmpty())
                     {
-                        var key = MekanismAPI.CHEMICAL_REGISTRY.getKey(stack.getChemical());
+                        var key = stack.getType().getRegistryName();
                         if (key != null) first = key.toString();
                     }
                 }
@@ -313,7 +322,7 @@ public final class MekScanner
         {
             if (!(tile instanceof IRecipeLookupHandler<?> handler)) return;
             Object raw = handler.getRecipe(0);
-            if (!(raw instanceof MekanismRecipe<?> recipe)) return;
+            if (!(raw instanceof MekanismRecipe recipe)) return;
             ItemStack output = recipe.getResultItem(blockEntity.getLevel().registryAccess());
             if (output != null && !output.isEmpty())
             {
@@ -344,8 +353,8 @@ public final class MekScanner
                 for (IEnergyContainer container : data.getEnergyContainers(null))
                 {
                     if (container == null) continue;
-                    stored += container.getEnergy();
-                    max += container.getMaxEnergy();
+                    stored += container.getEnergy().longValue();
+                    max += container.getMaxEnergy().longValue();
                 }
                 if (max > 0)
                 {

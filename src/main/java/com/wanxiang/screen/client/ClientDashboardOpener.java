@@ -5,13 +5,13 @@ import com.wanxiang.screen.ScreenHttpServer;
 import com.wanxiang.screen.WanXiangScreen;
 
 import net.minecraft.Util;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 
 // 进入世界就顺手把看板打开，省得每次翻书签
-@EventBusSubscriber(modid = WanXiangScreen.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = WanXiangScreen.MODID, value = Dist.CLIENT)
 public final class ClientDashboardOpener
 {
     private ClientDashboardOpener() {}

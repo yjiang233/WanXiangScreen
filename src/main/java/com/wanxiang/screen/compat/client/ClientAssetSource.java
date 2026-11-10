@@ -12,8 +12,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
-import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
-import net.neoforged.neoforge.fluids.FluidStack;
+import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.minecraftforge.fluids.FluidStack;
 
 // 只在客户端加载：把流体的原生 still 贴图和染色暴露给网页看板
 public final class ClientAssetSource implements AssetSource
@@ -65,7 +65,7 @@ public final class ClientAssetSource implements AssetSource
     {
         try
         {
-            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(namespace, "textures/" + path + ".png");
+            ResourceLocation location = new ResourceLocation(namespace, "textures/" + path + ".png");
             var resource = Minecraft.getInstance().getResourceManager().getResource(location);
             if (resource.isEmpty()) return null;
             try (InputStream in = resource.get().open())

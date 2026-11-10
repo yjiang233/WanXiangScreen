@@ -6,17 +6,18 @@ import com.mojang.logging.LogUtils;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.level.ChunkEvent;
-import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import net.neoforged.neoforge.event.server.ServerStoppingEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.level.ChunkEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 
 @Mod(WanXiangScreen.MODID)
 public class WanXiangScreen
@@ -24,12 +25,13 @@ public class WanXiangScreen
     public static final String MODID = "wanxiangscreen";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public WanXiangScreen(IEventBus modEventBus, ModContainer container)
+    public WanXiangScreen()
     {
         ErrorLog.install();
-        container.registerConfig(ModConfig.Type.COMMON, ScreenConfig.SPEC);
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ScreenConfig.SPEC);
         modEventBus.addListener((ModConfigEvent event) -> ScreenConfig.reload());
-        NeoForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(this);
         ScreenHttpServer.start();
     }
 
@@ -47,8 +49,9 @@ public class WanXiangScreen
     }
 
     @SubscribeEvent
-    public void onServerTick(ServerTickEvent.Post event)
+    public void onServerTick(TickEvent.ServerTickEvent event)
     {
+        if (event.phase != TickEvent.Phase.END) return;
         ServerThread.drain();
         ScreenState.tick(event.getServer());
     }

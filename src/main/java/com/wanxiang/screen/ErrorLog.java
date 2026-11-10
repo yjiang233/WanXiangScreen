@@ -13,7 +13,7 @@ import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 
-import net.neoforged.fml.loading.FMLPaths;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 /**
  * 把本模组自己的 WARN / ERROR 单独抄一份到 logs/wanxiangscreen-errors.log。
