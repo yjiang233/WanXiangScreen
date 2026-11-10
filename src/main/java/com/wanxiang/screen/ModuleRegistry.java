@@ -18,7 +18,9 @@ public final class ModuleRegistry
             new Spec("ae2", "Applied Energistics 2", "ME 网络库存 / 能量 / 可合成",
                     "未安装AE2", "inventory", "com.wanxiang.screen.compat.ae2.Ae2Module"),
             new Spec("mekanism", "Mekanism", "机器状态 / 加工进度 / 能量 / 储罐",
-                    "未安装Mekanism", "machines", "com.wanxiang.screen.compat.mek.MekModule")
+                    "未安装Mekanism", "machines", "com.wanxiang.screen.compat.mek.MekModule"),
+            new Spec("fluxnetworks", "Flux Networks", "通量网络拓扑 / 储能 / 能量吞吐",
+                    "未安装Flux Networks", "flux", "com.wanxiang.screen.compat.flux.FluxModule")
     );
 
     private static final Map<String, ScreenModule> INSTANCES = new LinkedHashMap<>();
@@ -84,6 +86,7 @@ public final class ModuleRegistry
 
         root.put("modules", modules);
         root.put("data", data);
+        root.put("baseline", server == null ? Map.of() : BaselineStats.compute(server, data));
         root.put("detected", detectExtras());
         root.put("mods", installedMods());
         return root;
@@ -95,6 +98,69 @@ public final class ModuleRegistry
         if (raw instanceof Map<?, ?> map && map.get(id) != null)
             return Map.of("id", id, "data", map.get(id));
         return Map.of("installed", false, "message", "未安装该模块");
+    }
+
+    // 通过反射调用 AE2 合成服务，保证未安装 AE2 时不会触发类加载错误
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> craft(String grid, String item, long amount)
+    {
+        MinecraftServer server = ScreenState.server();
+        if (server == null) return Map.of("ok", false, "error", "等待进入世界");
+        if (!isLoaded("ae2")) return Map.of("ok", false, "error", "未安装AE2");
+        try
+        {
+            Class<?> service = Class.forName("com.wanxiang.screen.compat.ae2.Ae2CraftService");
+            Object result = service.getMethod("craft", MinecraftServer.class, String.class, String.class, long.class)
+                    .invoke(null, server, grid, item, amount);
+            return result instanceof Map<?, ?> map ? (Map<String, Object>) map
+                    : Map.of("ok", false, "error", "合成接口返回未知数据");
+        }
+        catch (Throwable t)
+        {
+            return Map.of("ok", false, "error", "合成接口异常：" + t.getMessage());
+        }
+    }
+
+    // 只算不提交，供材料对话框使用
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> plan(String grid, String item, long amount)
+    {
+        MinecraftServer server = ScreenState.server();
+        if (server == null) return Map.of("ok", false, "error", "等待进入世界");
+        if (!isLoaded("ae2")) return Map.of("ok", false, "error", "未安装AE2");
+        try
+        {
+            Class<?> service = Class.forName("com.wanxiang.screen.compat.ae2.Ae2CraftService");
+            Object result = service.getMethod("plan", MinecraftServer.class, String.class, String.class, long.class)
+                    .invoke(null, server, grid, item, amount);
+            return result instanceof Map<?, ?> map ? (Map<String, Object>) map
+                    : Map.of("ok", false, "error", "合成接口返回未知数据");
+        }
+        catch (Throwable t)
+        {
+            return Map.of("ok", false, "error", "合成计划异常：" + t.getMessage());
+        }
+    }
+
+    // 取消某个合成 CPU 上正在跑的任务
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> cancelCraft(String grid, int index)
+    {
+        MinecraftServer server = ScreenState.server();
+        if (server == null) return Map.of("ok", false, "error", "等待进入世界");
+        if (!isLoaded("ae2")) return Map.of("ok", false, "error", "未安装AE2");
+        try
+        {
+            Class<?> service = Class.forName("com.wanxiang.screen.compat.ae2.Ae2CraftService");
+            Object result = service.getMethod("cancel", MinecraftServer.class, String.class, int.class)
+                    .invoke(null, server, grid, index);
+            return result instanceof Map<?, ?> map ? (Map<String, Object>) map
+                    : Map.of("ok", false, "error", "取消接口返回未知数据");
+        }
+        catch (Throwable t)
+        {
+            return Map.of("ok", false, "error", "取消接口异常：" + t.getMessage());
+        }
     }
 
     private static ScreenModule create(String className)

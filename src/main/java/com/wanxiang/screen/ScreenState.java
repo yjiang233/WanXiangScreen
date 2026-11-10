@@ -39,4 +39,6 @@ public final class ScreenState
     }
 
     public static Map<String, Object> get() { return snapshot; }
+
+    public static MinecraftServer server() { return server; }
 }
