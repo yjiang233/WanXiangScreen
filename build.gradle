@@ -85,6 +85,10 @@ neoForge {
         client {
             client()
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            // -PquickPlay=<存档名> 启动后直接进世界，便于自动化验证
+            if (project.hasProperty('quickPlay')) {
+                programArguments.addAll '--quickPlaySingleplayer', project.property('quickPlay').toString()
+            }
         }
 
         server {
@@ -124,13 +128,17 @@ configurations {
 
 // AE2 为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求
 dependencies {
-    compileOnly files("libs/appliedenergistics2-19.2.19.jar", "libs/Mekanism-1.21.1-10.7.19.85.jar")
-    // -PwithoutAe2 / -PwithoutMek 可启动真正缺少该依赖的环境，验证可选依赖降级
+    compileOnly files("libs/appliedenergistics2-19.2.19.jar", "libs/Mekanism-1.21.1-10.7.19.85.jar",
+            "libs/FluxNetworks-1.21.1-8.0.0.jar")
+    // -PwithoutAe2 / -PwithoutMek / -PwithoutFlux 可启动真正缺少该依赖的环境，验证可选依赖降级
     if (!project.hasProperty('withoutAe2')) {
         localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
     }
     if (!project.hasProperty('withoutMek')) {
         localRuntime files("libs/Mekanism-1.21.1-10.7.19.85.jar")
+    }
+    if (!project.hasProperty('withoutFlux')) {
+        localRuntime files("libs/FluxNetworks-1.21.1-8.0.0.jar")
     }
 }
 
@@ -159,6 +167,14 @@ neoForge.ideSyncTask generateModMetadata
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-Xlint:deprecation'
+}
+
+// 网页看板打进 jar：发布出去别人拿到 jar 也能直接开看板
+tasks.named('processResources', ProcessResources).configure {
+    from('dashboard') {
+        into 'dashboard'
+        exclude '**/*.map', '**/.DS_Store'
+    }
 }
 
 idea {

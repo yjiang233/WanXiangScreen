@@ -28,12 +28,17 @@ public final class ScreenConfig
             .comment("数据快照刷新间隔（tick），20 tick = 1 秒")
             .defineInRange("refreshTicks", 20, 5, 200);
 
+    private static final ModConfigSpec.BooleanValue OPEN_BROWSER_VALUE = BUILDER
+            .comment("进入单人/多人世界时自动用系统浏览器打开看板")
+            .define("openBrowserOnJoin", true);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     public static volatile String token = "";
     public static volatile List<String> watchedMods = DEFAULT_WATCHED;
     public static volatile List<String> simulateMissing = List.of();
     public static volatile int refreshTicks = 20;
+    public static volatile boolean openBrowserOnJoin = true;
 
     private ScreenConfig() {}
 
@@ -43,5 +48,6 @@ public final class ScreenConfig
         try { watchedMods = WATCHED_VALUE.get().stream().map(Object::toString).toList(); } catch (Throwable ignored) {}
         try { simulateMissing = SIMULATE_VALUE.get().stream().map(Object::toString).toList(); } catch (Throwable ignored) {}
         try { refreshTicks = REFRESH_VALUE.get(); } catch (Throwable ignored) {}
+        try { openBrowserOnJoin = OPEN_BROWSER_VALUE.get(); } catch (Throwable ignored) {}
     }
 }
