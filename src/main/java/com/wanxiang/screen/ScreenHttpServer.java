@@ -1,28 +1,53 @@
 package com.wanxiang.screen;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import java.util.zip.GZIPOutputStream;
 
 import com.google.gson.Gson;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.loading.FMLPaths;
 
 public final class ScreenHttpServer
 {
     private static final Gson GSON = new Gson();
     private static HttpServer server;
+    private static volatile int boundPort;
     private static volatile Path dashboardDir;
+    private static final AssetSource ASSETS = loadAssets();
 
     private ScreenHttpServer() {}
+
+    // 客户端自动打开浏览器时要用
+    public static int port() { return boundPort; }
+
+    // 客户端资源（流体贴图）只在物理客户端加载，专用服务器上保持 null
+    private static AssetSource loadAssets()
+    {
+        try
+        {
+            if (!FMLEnvironment.dist.isClient()) return null;
+            Class<?> type = Class.forName("com.wanxiang.screen.compat.client.ClientAssetSource");
+            return (AssetSource) type.getDeclaredConstructor().newInstance();
+        }
+        catch (Throwable t)
+        {
+            WanXiangScreen.LOGGER.debug("客户端贴图源不可用", t);
+            return null;
+        }
+    }
 
     public static void start()
     {
@@ -37,6 +62,7 @@ public final class ScreenHttpServer
                 candidate.setExecutor(Executors.newFixedThreadPool(4));
                 candidate.start();
                 server = candidate;
+                boundPort = port;
                 WanXiangScreen.LOGGER.info("万象屏 HTTP 已监听 http://127.0.0.1:{}/", port);
                 writePortFile(port);
                 return;
@@ -93,24 +119,81 @@ public final class ScreenHttpServer
             }
             else if ("/api/status".equals(path))
             {
-                sendJson(exchange, 200, ScreenState.get());
+                sendJson(exchange, 200, ScreenState.get(), true);
+            }
+            else if ("/api/fluids".equals(path))
+            {
+                if (ASSETS == null) sendJson(exchange, 404, Map.of("error", "流体贴图只在客户端可用"));
+                else sendJson(exchange, 200, Map.of("fluids", ASSETS.fluidInfo()), true);
+            }
+            else if (path.startsWith("/api/tex/"))
+            {
+                String rest = path.substring("/api/tex/".length());
+                int slash = rest.indexOf('/');
+                byte[] bytes = slash <= 0 || ASSETS == null ? null : ASSETS.texture(rest.substring(0, slash), rest.substring(slash + 1));
+                if (bytes == null) sendText(exchange, 404, "贴图不存在");
+                else sendBytes(exchange, bytes, "image/png", "public, max-age=86400");
             }
             else if ("/api/modules".equals(path))
             {
-                sendJson(exchange, 200, Map.of("modules", ScreenState.get().get("modules")));
+                sendJson(exchange, 200, Map.of("modules", ScreenState.get().get("modules")), true);
             }
             else if ("/api/mods".equals(path))
             {
-                sendJson(exchange, 200, Map.of("mods", ScreenState.get().get("mods")));
+                sendJson(exchange, 200, Map.of("mods", ScreenState.get().get("mods")), true);
             }
             else if ("/api/ae2/inventory".equals(path))
             {
-                sendJson(exchange, 200, ModuleRegistry.moduleData("ae2"));
+                sendJson(exchange, 200, ModuleRegistry.moduleData("ae2"), true);
             }
             else if (path.startsWith("/api/module/") && path.endsWith("/data"))
             {
                 String id = path.substring("/api/module/".length(), path.length() - "/data".length());
-                sendJson(exchange, 200, ModuleRegistry.moduleData(id));
+                sendJson(exchange, 200, ModuleRegistry.moduleData(id), true);
+            }
+            else if ("/api/ae2/craft".equals(path) || "/api/ae2/plan".equals(path))
+            {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod()))
+                {
+                    sendJson(exchange, 405, Map.of("ok", false, "error", "请使用 POST"));
+                    return;
+                }
+                boolean planOnly = path.endsWith("/plan");
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                try
+                {
+                    var json = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                    String grid = json.has("grid") ? json.get("grid").getAsString() : "";
+                    String item = json.has("item") ? json.get("item").getAsString() : "";
+                    long amount = json.has("amount") ? json.get("amount").getAsLong() : 0;
+                    sendJson(exchange, 200, planOnly
+                            ? ModuleRegistry.plan(grid, item, amount)
+                            : ModuleRegistry.craft(grid, item, amount));
+                }
+                catch (Exception e)
+                {
+                    sendJson(exchange, 400, Map.of("ok", false, "error", "请求体不是合法 JSON"));
+                }
+            }
+            else if ("/api/ae2/cancel".equals(path))
+            {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod()))
+                {
+                    sendJson(exchange, 405, Map.of("ok", false, "error", "请使用 POST"));
+                    return;
+                }
+                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                try
+                {
+                    var json = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+                    String grid = json.has("grid") ? json.get("grid").getAsString() : "";
+                    int cpu = json.has("cpu") ? json.get("cpu").getAsInt() : -1;
+                    sendJson(exchange, 200, ModuleRegistry.cancelCraft(grid, cpu));
+                }
+                catch (Exception e)
+                {
+                    sendJson(exchange, 400, Map.of("ok", false, "error", "请求体不是合法 JSON"));
+                }
             }
             else if (!path.startsWith("/api/"))
             {
@@ -130,23 +213,47 @@ public final class ScreenHttpServer
 
     private static void serveStatic(HttpExchange exchange, String path) throws IOException
     {
-        Path dir = dashboard();
-        if (dir == null)
-        {
-            sendText(exchange, 404, "未找到 dashboard 目录");
-            return;
-        }
         String relative = path.equals("/") ? "index.html" : path.substring(1);
-        Path file = dir.resolve(relative).normalize();
-        if (!file.startsWith(dir) || !Files.isRegularFile(file))
+        if (relative.contains("..") || relative.contains("\\"))
         {
             sendText(exchange, 404, "文件不存在");
             return;
         }
-        byte[] bytes = Files.readAllBytes(file);
-        exchange.getResponseHeaders().set("Content-Type", mime(relative));
+        byte[] bytes = readStatic(relative);
+        if (bytes == null)
+        {
+            sendText(exchange, 404, "文件不存在");
+            return;
+        }
+        Headers headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", mime(relative));
+        boolean asset = relative.startsWith("assets/") && !relative.endsWith(".json");
+        headers.set("Cache-Control", asset ? "public, max-age=604800" : "no-store");
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream out = exchange.getResponseBody()) { out.write(bytes); }
+    }
+
+    // 开发时优先读磁盘上的 dashboard 目录（改完刷新就生效），否则读打进 jar 的那份
+    private static byte[] readStatic(String relative)
+    {
+        Path dir = dashboard();
+        if (dir != null)
+        {
+            Path file = dir.resolve(relative).normalize();
+            if (file.startsWith(dir) && Files.isRegularFile(file))
+            {
+                try { return Files.readAllBytes(file); }
+                catch (IOException ignored) {}
+            }
+        }
+        try (InputStream in = ScreenHttpServer.class.getResourceAsStream("/dashboard/" + relative))
+        {
+            return in == null ? null : in.readAllBytes();
+        }
+        catch (IOException | RuntimeException ignored)
+        {
+            return null;
+        }
     }
 
     // 依次向上找 <游戏目录>/dashboard、<游戏目录>/../dashboard ... 兼容 run、run/client 等布局
@@ -191,11 +298,69 @@ public final class ScreenHttpServer
         headers.set("Cache-Control", "no-store");
     }
 
+    // 内容哈希做 ETag：快照每 tick 都会重建，但只有内容真的变了才需要重新传输
+    private static String contentTag(byte[] bytes)
+    {
+        try
+        {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(bytes);
+            StringBuilder sb = new StringBuilder(34).append('"');
+            for (byte b : digest) sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            return sb.append('"').toString();
+        }
+        catch (Throwable t)
+        {
+            return "\"" + Integer.toHexString(java.util.Arrays.hashCode(bytes)) + "\"";
+        }
+    }
+
+    private static boolean acceptsGzip(HttpExchange exchange)
+    {
+        String accept = exchange.getRequestHeaders().getFirst("Accept-Encoding");
+        return accept != null && accept.toLowerCase().contains("gzip");
+    }
+
     private static void sendJson(HttpExchange exchange, int code, Object body) throws IOException
     {
+        sendJson(exchange, code, body, false);
+    }
+
+    private static void sendJson(HttpExchange exchange, int code, Object body, boolean cacheable) throws IOException
+    {
         byte[] bytes = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        Headers headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", "application/json; charset=utf-8");
+        if (cacheable && code == 200)
+        {
+            String tag = contentTag(bytes);
+            headers.set("ETag", tag);
+            headers.set("Cache-Control", "no-cache");
+            if (tag.equals(exchange.getRequestHeaders().getFirst("If-None-Match")))
+            {
+                exchange.sendResponseHeaders(304, -1);
+                exchange.close();
+                return;
+            }
+        }
+        if (bytes.length > 1024 && acceptsGzip(exchange))
+        {
+            headers.set("Content-Encoding", "gzip");
+            headers.set("Vary", "Accept-Encoding");
+            exchange.sendResponseHeaders(code, 0);
+            try (OutputStream out = new GZIPOutputStream(exchange.getResponseBody(), 8192)) { out.write(bytes); }
+            return;
+        }
         exchange.sendResponseHeaders(code, bytes.length);
+        try (OutputStream out = exchange.getResponseBody()) { out.write(bytes); }
+    }
+
+    private static void sendBytes(HttpExchange exchange, byte[] bytes, String type, String cache) throws IOException
+    {
+        Headers headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", type);
+        headers.set("Cache-Control", cache == null ? "no-store" : cache);
+        exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream out = exchange.getResponseBody()) { out.write(bytes); }
     }
 
