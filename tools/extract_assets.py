@@ -96,7 +96,7 @@ def fallback_texture(texture_index, ns, item):
             keys.append(item[len(prefix):])
     for key in keys:
         for path in texture_index.get(key, []):
-            if path.startswith(f"assets/{ns}/textures/"):
+            if path.startswith(f"assets/{ns}/textures/") and "/textures/gui/" not in path:
                 return path
     return None
 
