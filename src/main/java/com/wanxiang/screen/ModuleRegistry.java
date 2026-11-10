@@ -148,6 +148,7 @@ public final class ModuleRegistry
 
     private static boolean isLoaded(String id)
     {
+        if (ScreenConfig.simulateMissing.contains(id)) return false;
         try { return ModList.get().isLoaded(id); }
         catch (Throwable t) { return false; }
     }

@@ -26,19 +26,42 @@ public final class ScreenHttpServer
 
     public static void start()
     {
-        int port = Integer.getInteger("wanxiangscreen.port", 8765);
+        int preferred = Integer.getInteger("wanxiangscreen.port", 18765);
+        int[] candidates = { preferred, 18765, 18766, 18767, 18768 };
+        for (int port : candidates)
+        {
+            try
+            {
+                HttpServer candidate = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+                candidate.createContext("/", ScreenHttpServer::handle);
+                candidate.setExecutor(Executors.newFixedThreadPool(4));
+                candidate.start();
+                server = candidate;
+                WanXiangScreen.LOGGER.info("万象屏 HTTP 已监听 http://127.0.0.1:{}/", port);
+                writePortFile(port);
+                return;
+            }
+            catch (java.net.BindException ignored)
+            {
+                // 端口被占用，尝试下一个
+            }
+            catch (Exception e)
+            {
+                WanXiangScreen.LOGGER.warn("万象屏 HTTP 启动失败", e);
+                return;
+            }
+        }
+        WanXiangScreen.LOGGER.warn("万象屏 HTTP 启动失败：候选端口均被占用");
+    }
+
+    private static void writePortFile(int port)
+    {
         try
         {
-            server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
-            server.createContext("/", ScreenHttpServer::handle);
-            server.setExecutor(Executors.newFixedThreadPool(4));
-            server.start();
-            WanXiangScreen.LOGGER.info("万象屏 HTTP 已监听 http://127.0.0.1:{}/", port);
+            Path file = FMLPaths.GAMEDIR.get().resolve("wanxiangscreen.port");
+            Files.writeString(file, Integer.toString(port));
         }
-        catch (Exception e)
-        {
-            WanXiangScreen.LOGGER.warn("万象屏 HTTP 启动失败（端口可能被占用）", e);
-        }
+        catch (Exception ignored) {}
     }
 
     public static void stop()

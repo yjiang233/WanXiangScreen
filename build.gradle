@@ -35,6 +35,44 @@ repositories {
     mavenCentral()
 }
 
+// 用户名含非 ASCII 字符时，开发启动早期窗口无法从 Gradle 缓存解析 LWJGL 原生库。
+// 这里把 natives jar 里的 DLL 解到纯 ASCII 的 build/natives 并显式指定查找路径。
+def nativesDir = layout.buildDirectory.dir("natives")
+def prepareNatives = tasks.register("prepareNatives") {
+    outputs.dir(nativesDir)
+    doLast {
+        def out = nativesDir.get().asFile
+        out.mkdirs()
+        def cache = new File(System.getProperty("user.home"), ".gradle/caches/neoformruntime/artifacts/org/lwjgl")
+        if (!cache.isDirectory()) {
+            logger.warn("未找到 LWJGL natives 缓存: ${cache}")
+            return
+        }
+        def count = 0
+        cache.eachFileRecurse { File jar ->
+            if (!jar.name.endsWith("-natives-windows.jar")) return
+            new java.util.zip.ZipFile(jar).withCloseable { zip ->
+                def entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    def entry = entries.nextElement()
+                    if (entry.isDirectory() || !entry.name.endsWith(".dll")) continue
+                    def name = new File(entry.name).name
+                    def flat = new File(out, name)
+                    def nested = new File(out, "windows/x64/org/lwjgl/" + name)
+                    nested.parentFile.mkdirs()
+                    zip.getInputStream(entry).withCloseable { input ->
+                        flat.bytes = input.bytes
+                    }
+                    nested.bytes = flat.bytes
+                    count++
+                }
+            }
+        }
+        logger.lifecycle("已准备 ${count} 个 LWJGL 原生库 -> ${out}")
+    }
+}
+tasks.matching { it.name.startsWith("run") }.configureEach { dependsOn prepareNatives }
+
 neoForge {
     version = project.neo_version
 
@@ -64,6 +102,10 @@ neoForge {
 
         configureEach {
             logLevel = org.slf4j.event.Level.DEBUG
+            def lwjglCache = new File(System.getProperty("user.home"), ".gradle/caches/neoformruntime/artifacts/org/lwjgl")
+            if (lwjglCache.isDirectory()) {
+                systemProperty 'org.lwjgl.librarypath', nativesDir.get().asFile.absolutePath
+            }
         }
     }
 
@@ -83,7 +125,10 @@ configurations {
 // AE2 为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求
 dependencies {
     compileOnly files("libs/appliedenergistics2-19.2.19.jar")
-    localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
+    // -PwithoutAe2 可启动一个真正没有 AE2 的运行环境，验证可选依赖降级
+    if (!project.hasProperty('withoutAe2')) {
+        localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
+    }
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

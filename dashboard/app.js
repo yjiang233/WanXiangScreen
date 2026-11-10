@@ -1,5 +1,6 @@
 const params = new URLSearchParams(location.search);
-const API = params.get('api') || (location.port === '8765' ? location.origin : 'http://127.0.0.1:8765');
+const DEFAULT_PORTS = [18765, 18766, 18767, 18768];
+const API = params.get('api') || (DEFAULT_PORTS.includes(location.port) ? location.origin : 'http://127.0.0.1:18765');
 
 const el = (id) => document.getElementById(id);
 const state = { status: null, query: '', activeGrid: null, prev: {}, first: true, ok: false };

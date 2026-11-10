@@ -13,8 +13,10 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 ./gradlew build         # 打包，产物 build/libs/wanxiangscreen-1.0.0.jar
 ```
 
-进入世界后打开 <http://127.0.0.1:8765/>；也可直接双击 `dashboard/index.html`。
-端口只监听 `127.0.0.1`，如需更换端口加 JVM 参数 `-Dwanxiangscreen.port=9000`。
+进入世界后打开 <http://127.0.0.1:18765/>；也可直接双击 `dashboard/index.html`。
+只监听 `127.0.0.1`；端口被占用时自动顺延到 18766~18768，实际端口写在
+`<游戏目录>/wanxiangscreen.port`，看板可用 `?api=http://127.0.0.1:18766` 指定。
+固定换端口用 JVM 参数 `-Dwanxiangscreen.port=9000`。
 
 ## 接口
 
@@ -28,7 +30,28 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 | `/api/health` | 健康检查 |
 
 配置在 `<游戏目录>/config/wanxiangscreen-common.toml`：`token`（鉴权，空=不校验）、
-`watchedMods`（关注的模组 ID）、`refreshTicks`（快照间隔，默认 20 tick）。
+`watchedMods`（关注的模组 ID）、`simulateMissing`（模拟依赖未安装）、`refreshTicks`（快照间隔，默认 20 tick）。
+配置文件改动会热更新，无需重启游戏。
+
+## 测试步骤
+
+新建创造模式世界，用下列命令搭一个最小 AE2 网络，通过 ME 终端往里放物品：
+
+```
+/give @s ae2:creative_energy_cell
+/give @s ae2:drive
+/give @s ae2:item_storage_cell_64k
+/give @s ae2:fluix_smart_cable 16
+/give @s ae2:terminal
+```
+
+把创造能源、驱动器用电缆连起来，存储元件放进驱动器，终端贴在电缆上即可。
+看板会每秒刷新库存；数量变化的行会高亮。
+
+验证「未安装AE2」有两种方式：
+
+1. 在 `wanxiangscreen-common.toml` 里设 `simulateMissing = ["ae2"]`，保存后约 1 秒看板即显示「未安装AE2」；改回 `[]` 恢复。
+2. `./gradlew runServer -PwithoutAe2` 启动一个真正不含 AE2 的服务端，验证类隔离与降级。
 
 ## 目录
 
@@ -53,6 +76,14 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 
 所有 AE2 对象只在服务端主线程读取：每 `refreshTicks` tick 生成一份不可变快照写入 volatile 字段，
 HTTP 线程只做 JSON 序列化，不接触 `IGrid`。库存读的是 `getCachedInventory()`，不走全量遍历。
+
+## 非 ASCII 用户目录
+
+本机用户名含中文，开发启动时早期加载窗口无法从 Gradle 缓存解析 LWJGL 原生库
+（PATH 里部分条目被编码成 U+FFFD，Java 转 GBK 后产生非法字符 `?`）。
+`prepareNatives` 任务会把 natives jar 解到纯 ASCII 的 `build/natives`，
+运行配置自动注入 `org.lwjgl.librarypath`，因此 `./gradlew runClient` 可直接用。
+若从 Agent 的非交互终端启动失败，检查 PATH 中是否含 U+FFFD 条目并剔除。
 
 ## 仓库镜像
 
