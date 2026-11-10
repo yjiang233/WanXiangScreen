@@ -16,7 +16,9 @@ public final class ModuleRegistry
     // 新增联动只需在此加一行 Spec，并提供一个实现 ScreenModule 的类
     private static final List<Spec> SPECS = List.of(
             new Spec("ae2", "Applied Energistics 2", "ME 网络库存 / 能量 / 可合成",
-                    "未安装AE2", "inventory", "com.wanxiang.screen.compat.ae2.Ae2Module")
+                    "未安装AE2", "inventory", "com.wanxiang.screen.compat.ae2.Ae2Module"),
+            new Spec("mekanism", "Mekanism", "机器状态 / 加工进度 / 能量 / 储罐",
+                    "未安装Mekanism", "machines", "com.wanxiang.screen.compat.mek.MekModule")
     );
 
     private static final Map<String, ScreenModule> INSTANCES = new LinkedHashMap<>();

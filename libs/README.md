@@ -6,3 +6,5 @@
   https://cdn.modrinth.com/data/XxWD5pD3/versions/DxZ2waV0/appliedenergistics2-19.2.19.jar
 - guideme-21.1.22.jar （AE2 的强制依赖）
   https://cdn.modrinth.com/data/Ck4E7v7R/versions/QeYKsstN/guideme-21.1.22.jar
+- Mekanism-1.21.1-10.7.19.85.jar （无强制额外依赖）
+  https://cdn.modrinth.com/data/Ce6I4WUE/versions/5KzzycBT/Mekanism-1.21.1-10.7.19.85.jar

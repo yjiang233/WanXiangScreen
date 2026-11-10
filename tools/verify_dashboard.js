@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..', 'dashboard');
 const api = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:18765/api/status';
 const mockDrive = process.argv.includes('--mock-drive');
 const mockMissing = process.argv.includes('--mock-missing');
+const mockMek = process.argv.includes('--mock-mek');
 
 function get(url) {
   return new Promise((resolve, reject) => {
@@ -51,6 +52,37 @@ function sampleGrid() {
   };
 }
 
+function sampleMek() {
+  const machine = (id, category, categoryName, active, extra = {}) => ({
+    id, name: id, category, categoryName, dimension: 'minecraft:overworld', pos: [12, 64, -8], active,
+    progress: { ticks: 120, required: 400, percent: 30 },
+    energy: { stored: 12000, max: 100000 },
+    items: { slots: 8, used: 3, count: 45, first: 'minecraft:iron_ore' },
+    fluids: { amount: 8000, capacity: 16000, first: 'minecraft:water' },
+    chemicals: { amount: 1200, capacity: 8000, first: 'mekanism:oxygen' },
+    recipeOutput: 'minecraft:iron_ingot', recipeName: 'Iron Ingot',
+    ...extra
+  });
+  const machines = [
+    machine('mekanism:crusher', 'processing', '加工机器', true),
+    machine('mekanism:energized_smelter', 'processing', '加工机器', false),
+    machine('mekanism:basic_crushing_factory', 'factory', '工厂机器', true),
+    machine('mekanism:advanced_energy_cube', 'energy', '能源与电网', true, { multiblock: { formed: true, volume: 512, boilEfficiency: 0.86 } }),
+    machine('mekanism:fission_reactor_casing', 'reactor', '核反应堆', false, { multiblock: { formed: false, volume: 0 } }),
+    machine('mekanism:dynamic_tank', 'structure', '多方块结构', false),
+    machine('mekanism:elite_fluid_tank', 'storage', '储罐与仓储', false),
+    machine('mekanism:digital_miner', 'mining', '采矿设备', true)
+  ];
+  const map = new Map();
+  for (const m of machines) {
+    const entry = map.get(m.category) || { id: m.category, name: m.categoryName, total: 0, running: 0 };
+    entry.total++;
+    if (m.active) entry.running++;
+    map.set(m.category, entry);
+  }
+  return { machines, categories: [...map.values()], total: machines.length, running: machines.filter((m) => m.active).length };
+}
+
 async function main() {
   let status;
   try {
@@ -61,6 +93,13 @@ async function main() {
   if (mockMissing) {
     status.modules = [{ id: 'ae2', name: 'Applied Energistics 2', state: 'missing', installed: false, view: 'inventory', message: '未安装AE2' }];
     status.data = { ae2: { installed: false, message: '未安装AE2' } };
+  }
+  if (mockMek) {
+    status.modules = [
+      { id: 'ae2', name: 'Applied Energistics 2', state: 'online', installed: true, view: 'inventory', message: 'ok' },
+      { id: 'mekanism', name: 'Mekanism', state: 'online', installed: true, view: 'machines', message: 'ok' }
+    ];
+    status.data = { ae2: { grids: [sampleGrid()], drives: 1, cellSummary: [] }, mekanism: sampleMek() };
   }
   if (mockDrive) {
     const grids = status?.data?.ae2?.grids;
@@ -102,21 +141,25 @@ async function main() {
   const result = {
     htmlBytes: html.length,
     slots: (html.match(/class="slot/g) || []).length,
-    icons: (html.match(/<img class="icon"/g) || []).length,
+    icons: (html.match(/<img class="icon/g) || []).length,
     unknownIcons: (html.match(/src="assets\/gui\/unknown\.png"/g) || []).length,
     driveCards: (html.match(/class="drive-card"/g) || []).length,
     cellSummary: (html.match(/class="cell-summary-item"/g) || []).length,
     capacityBars: (html.match(/class="cell-bar"/g) || []).length,
+    machineCards: (html.match(/class="machine-card/g) || []).length,
+    categoryTabs: (html.match(/class="cat-tab/g) || []).length,
+    machineGroups: (html.match(/class="machine-grid"/g) || []).length,
     undefined: (html.match(/undefined/g) || []).length,
     nan: (html.match(/NaN/g) || []).length,
     drivePanel: html.includes('ME 驱动器'),
-    missingPanel: html.includes('未安装AE2'),
+    missingPanel: html.includes('class="ae-empty missing"'),
     iconProbe
   };
   console.log(JSON.stringify(result, null, 2));
   if (!html.length || result.undefined || result.nan) process.exitCode = 1;
   if (mockDrive && (!result.driveCards || result.slots < 10 || result.capacityBars < 3 || result.unknownIcons)) process.exitCode = 1;
   if (mockMissing && !result.missingPanel) process.exitCode = 1;
+  if (mockMek && (!result.machineCards || !result.categoryTabs || !result.machineGroups)) process.exitCode = 1;
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });

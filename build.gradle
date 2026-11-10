@@ -124,10 +124,13 @@ configurations {
 
 // AE2 为可选依赖：编译期需要其 API，运行期由 runClient 加载但 mods.toml 中不强制要求
 dependencies {
-    compileOnly files("libs/appliedenergistics2-19.2.19.jar")
-    // -PwithoutAe2 可启动一个真正没有 AE2 的运行环境，验证可选依赖降级
+    compileOnly files("libs/appliedenergistics2-19.2.19.jar", "libs/Mekanism-1.21.1-10.7.19.85.jar")
+    // -PwithoutAe2 / -PwithoutMek 可启动真正缺少该依赖的环境，验证可选依赖降级
     if (!project.hasProperty('withoutAe2')) {
         localRuntime files("libs/appliedenergistics2-19.2.19.jar", "libs/guideme-21.1.22.jar")
+    }
+    if (!project.hasProperty('withoutMek')) {
+        localRuntime files("libs/Mekanism-1.21.1-10.7.19.85.jar")
     }
 }
 

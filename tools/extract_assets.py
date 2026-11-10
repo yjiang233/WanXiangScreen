@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "dashboard" / "assets"
 
 JARS = sorted((ROOT / "libs").glob("appliedenergistics2-*.jar")) + sorted(
+    (ROOT / "libs").glob("Mekanism-*.jar")
+) + sorted(
     (ROOT / "build" / "moddev" / "artifacts").glob("*client-extra*.jar")
 )
 
@@ -87,11 +89,28 @@ def texture_candidates(assets, ns, path, inherited=None, depth=0):
     return candidates
 
 
+def fallback_texture(texture_index, ns, item):
+    keys = [item]
+    for prefix in ("basic_", "advanced_", "elite_", "ultimate_", "creative_"):
+        if item.startswith(prefix):
+            keys.append(item[len(prefix):])
+    for key in keys:
+        for path in texture_index.get(key, []):
+            if path.startswith(f"assets/{ns}/textures/"):
+                return path
+    return None
+
+
 def main():
     if not JARS:
-        sys.exit("未找到 AE2 或 Minecraft 客户端资源 jar")
+        sys.exit("未找到 AE2 / Mekanism / Minecraft 客户端资源 jar")
     assets = Assets(JARS)
     OUT.mkdir(parents=True, exist_ok=True)
+
+    texture_index = {}
+    for name in assets.names("assets/"):
+        if "/textures/" in name and name.endswith(".png"):
+            texture_index.setdefault(Path(name).stem, []).append(name)
 
     icon_map = {}
     textures = set()
@@ -102,13 +121,19 @@ def main():
     for model_path in models:
         ns = model_path.split("/")[1]
         item = model_path.split("/models/item/", 1)[1][:-5]
+        picked = None
         for ref in texture_candidates(assets, ns, f"item/{item}"):
             path = texture_path(ref)
-            if assets.read(path) is None:
-                continue
-            textures.add(path)
-            icon_map[f"{ns}:{item}"] = "assets/tex/" + path[len("assets/"):]
-            break
+            if assets.read(path) is not None:
+                picked = path
+                break
+        exact = fallback_texture(texture_index, ns, item)
+        generic = ("steel_casing", "/generics/", "casing.png", "particle")
+        if exact and (picked is None or any(marker in picked for marker in generic)):
+            picked = exact
+        if picked:
+            textures.add(picked)
+            icon_map[f"{ns}:{item}"] = "assets/tex/" + picked[len("assets/"):]
 
     for path in textures:
         target = OUT / "tex" / path[len("assets/"):]
@@ -138,14 +163,26 @@ def main():
     d.text((5, 2), "?", fill=(65, 63, 84, 255))
     unknown.save(gui / "unknown.png")
 
-    zh = assets.read("assets/ae2/lang/zh_cn.json")
-    if zh:
-        (OUT / "lang-zh.json").write_bytes(zh)
+    lang = {}
+    for name in assets.names("assets/"):
+        if not name.endswith("/lang/zh_cn.json"):
+            continue
+        raw = assets.read(name)
+        if not raw:
+            continue
+        try:
+            lang.update(json.loads(raw))
+        except (ValueError, UnicodeDecodeError):
+            pass
+    if lang:
+        (OUT / "lang-zh.json").write_text(
+            json.dumps(lang, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
 
     total = sum(p.stat().st_size for p in (OUT / "tex").rglob("*.png"))
     print(f"物品图标: {len(icon_map)} 项 / {len(textures)} 张贴图 / {total / 1024 / 1024:.2f} MB")
     print(f"GUI 资源: {len(list(gui.glob('*.png')))} 张")
-    print(f"中文名: {'已生成' if zh else 'AE2 未提供 zh_cn'}")
+    print(f"中文名: {len(lang)} 条")
     print(f"输出: {OUT}")
 
 

@@ -3,7 +3,7 @@ const DEFAULT_PORTS = ['18765', '18766', '18767', '18768'];
 const API = params.get('api') || (DEFAULT_PORTS.includes(location.port) ? location.origin : 'http://127.0.0.1:18765');
 
 const el = (id) => document.getElementById(id);
-const state = { status: null, query: '', activeGrid: null, prev: {}, first: true, ok: false, icons: {}, lang: {} };
+const state = { status: null, query: '', activeGrid: null, activeCategory: 'all', prev: {}, first: true, ok: false, icons: {}, lang: {} };
 
 const CELL_STATE = {
   ABSENT: { label: '空槽位', color: '#6b6f80' },
@@ -41,8 +41,8 @@ function iconUrl(id) {
   return state.icons[id] || 'assets/gui/unknown.png';
 }
 
-function icon(id) {
-  return `<img class="icon" src="${esc(iconUrl(id))}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/gui/unknown.png'">`;
+function icon(id, cls = '') {
+  return `<img class="icon ${cls}" src="${esc(iconUrl(id))}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/gui/unknown.png'">`;
 }
 
 function zhName(id, fallback) {
@@ -87,18 +87,16 @@ async function poll() {
 
 function renderStatus() {
   const s = state.status;
-  const module = (s?.modules || []).find((m) => m.id === 'ae2');
-  const status = module?.state;
+  const modules = s?.modules || [];
   let color = '#d73e42';
   let label = '未连接';
-  if (state.ok) {
-    const map = { online: ['#35a865', '已接入'], missing: ['#d73e42', '未安装AE2'], waiting: ['#dfa52b', '等待世界'], error: ['#d73e42', '读取异常'] };
-    [color, label] = map[status] || ['#dfa52b', '未接入'];
+  if (state.ok && modules.length) {
+    const online = modules.filter((m) => m.state === 'online').length;
+    const broken = modules.filter((m) => m.state === 'error' || m.state === 'missing').length;
+    color = broken ? '#dfa52b' : (online === modules.length ? '#35a865' : '#dfa52b');
+    label = online === modules.length && !broken ? `已接入 ${online}/${modules.length}` : `${online}/${modules.length} 已接入`;
   }
-  const grids = s?.data?.ae2?.grids || [];
-  const active = state.ok && status === 'online';
   return `<i class="led" style="--led:${color}"></i><span>${esc(label)}</span>` +
-    (active && grids.length ? `<span class="status-sep"></span><b>${grids.length}</b><span>ME 网络</span>` : '') +
     `<span class="status-time">${esc(timeOf(s?.updatedAt))}</span>`;
 }
 
@@ -124,11 +122,12 @@ function render() {
 function renderModule(m, data) {
   const head = `<div class="ae-head"><h2>${esc(m.name)}<span class="sub">${esc(m.id)}</span></h2></div>`;
   if (m.state === 'missing') {
-    return `<div class="ae-panel">${head}<div class="ae-empty missing"><strong>未安装AE2</strong>安装 Applied Energistics 2 后自动接入</div></div>`;
+    return `<div class="ae-panel">${head}<div class="ae-empty missing"><strong>${esc(m.message || (m.name + ' 未安装'))}</strong>安装 ${esc(m.name)} 后自动接入</div></div>`;
   }
   if (m.state === 'waiting' || m.state === 'error' || !m.installed) {
     return `<div class="ae-panel">${head}<div class="ae-empty"><strong>${esc(m.message || '等待数据')}</strong>进入一个世界后开始读取</div></div>`;
   }
+  if (m.view === 'machines') return renderMachines(m, data);
   if (m.view !== 'inventory') {
     return `<div class="ae-panel">${head}<div class="ae-empty"><strong>已接入</strong>${esc(m.message)}</div></div>`;
   }
@@ -240,6 +239,72 @@ function renderDriveCard(drive, index) {
   </div>`;
 }
 
+function renderMachines(m, data) {
+  const head = `<div class="ae-head"><h2>${esc(m.name)}<span class="sub">机器状态</span></h2></div>`;
+  const machines = data.machines || [];
+  if (!machines.length) {
+    return `<div class="ae-panel">${head}<div class="ae-empty"><strong>未发现机器</strong>机器需位于已加载区块，进入世界后自动扫描</div></div>`;
+  }
+  const categories = data.categories || [];
+  if (state.activeCategory !== 'all' && !categories.some((c) => c.id === state.activeCategory)) state.activeCategory = 'all';
+  const multiblock = machines.filter((x) => x.multiblock && x.multiblock.formed).length;
+  const stats = `<div class="ae-stats">
+    <div><b>${num(data.total)}</b><span>机器总数</span></div>
+    <div><b>${num(data.running)}</b><span>运行中</span></div>
+    <div><b>${num(categories.length)}</b><span>设备分类</span></div>
+    <div><b>${num(multiblock)}</b><span>多方块结构</span></div>
+  </div>`;
+  const tabs = `<div class="cat-tabs">
+    <button class="cat-tab ${state.activeCategory === 'all' ? 'active' : ''}" data-category="all">全部 <b>${machines.length}</b></button>
+    ${categories.map((c) => `<button class="cat-tab ${state.activeCategory === c.id ? 'active' : ''}" data-category="${esc(c.id)}">${esc(c.name)} <b>${c.total}</b></button>`).join('')}
+  </div>`;
+  const groups = categories
+    .filter((c) => state.activeCategory === 'all' || c.id === state.activeCategory)
+    .map((c) => `<div class="ae-panel">
+      <div class="ae-head"><h2>${esc(c.name)}<span class="sub">${c.total} 台 · ${c.running} 台运行中</span></h2></div>
+      <div class="machine-grid">${machines.filter((x) => x.category === c.id).map(machineCard).join('')}</div>
+    </div>`).join('');
+  return `<div class="ae-panel">${head}${stats}<div class="cat-wrap">${tabs}</div></div>${groups}`;
+}
+
+function machineCard(m) {
+  const name = zhName(m.id, m.name);
+  const mb = m.multiblock;
+  const unformed = mb && !mb.formed;
+  const status = unformed ? '未成型' : (m.active ? '运行中' : '待机');
+  const led = unformed ? '#d73e42' : (m.active ? '#35a865' : '#6b6f80');
+  const progress = m.progress;
+  const energy = m.energy;
+  const energyPct = energy && energy.max ? Math.min(100, Math.round(energy.stored / energy.max * 100)) : 0;
+  const pos = m.pos ? m.pos.join(', ') : '—';
+  const meta = [];
+  if (m.items && m.items.slots) meta.push(`物品 ${m.items.used}/${m.items.slots}`);
+  if (m.fluids) meta.push(`流体 ${short(m.fluids.amount)}/${short(m.fluids.capacity)}`);
+  if (m.chemicals) meta.push(`化学品 ${short(m.chemicals.amount)}/${short(m.chemicals.capacity)}`);
+  if (m.recipeOutput) meta.push(`产出 ${zhName(m.recipeOutput, m.recipeName)}`);
+  if (mb && mb.formed) meta.push(`结构 ${num(mb.volume)} 格`);
+  const tip = [
+    name, m.id, `${m.dimension || '—'} · ${pos}`, `${status} · ${m.categoryName || ''}`,
+    progress ? `加工 ${progress.ticks}/${progress.required} tick · ${progress.percent}%` : '',
+    energy ? `能量 ${num(energy.stored)} / ${num(energy.max)} J` : '',
+    m.items ? `物品槽 ${m.items.used}/${m.items.slots} · ${num(m.items.count)} 个` : '',
+    m.fluids ? `流体 ${num(m.fluids.amount)}/${num(m.fluids.capacity)}${m.fluids.first ? ' · ' + m.fluids.first : ''}` : '',
+    m.chemicals ? `化学品 ${num(m.chemicals.amount)}/${num(m.chemicals.capacity)}${m.chemicals.first ? ' · ' + m.chemicals.first : ''}` : '',
+    mb ? `多方块 ${mb.formed ? '已成型' : '未成型'} · ${num(mb.volume || 0)} 格` : '',
+    ...Object.entries(mb || {}).filter(([k, v]) => typeof v === 'number' && k !== 'volume').map(([k, v]) => `${k}: ${num(v)}`)
+  ].filter(Boolean).join('\n');
+  return `<div class="machine-card ${m.active ? 'running' : ''}"${tipAttr(tip)}>
+    <div class="mc-head">${icon(m.id, 'mc-icon')}
+      <div class="mc-title"><div class="mc-name">${esc(name)}</div><div class="mc-id">${esc(m.id)}</div></div>
+      <i class="led" style="--led:${led}"></i>
+    </div>
+    <div class="mc-state">${esc(status)} · ${esc(pos)}</div>
+    ${progress ? `<div class="mc-line"><span>进度</span><div class="bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>` : ''}
+    ${energy ? `<div class="mc-line"><span>能量</span><div class="bar"><i class="energy" style="width:${energyPct}%"></i></div><b>${short(energy.stored)}/${short(energy.max)}</b></div>` : ''}
+    <div class="mc-meta">${meta.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+  </div>`;
+}
+
 function renderDetected(list) {
   if (!list.length) return '';
   return `<span>已检测，尚未接入</span>` + list.map((d) => `<span class="chip">${esc(d.name)}</span>`).join('');
@@ -281,7 +346,9 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('click', (e) => {
   const tab = e.target.closest('[data-grid]');
-  if (tab) { state.activeGrid = tab.dataset.grid; render(); }
+  if (tab) { state.activeGrid = tab.dataset.grid; render(); return; }
+  const category = e.target.closest('[data-category]');
+  if (category) { state.activeCategory = category.dataset.category; render(); }
 });
 
 loadAssets().then(() => {
