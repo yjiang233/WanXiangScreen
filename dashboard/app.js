@@ -129,7 +129,7 @@ function renderModule(m, data) {
   }
   if (m.view === 'machines') return renderMachines(m, data);
   if (m.view !== 'inventory') {
-    return `<div class="ae-panel">${head}<div class="ae-empty"><strong>已接入</strong>${esc(m.message)}</div></div>`;
+    return `<div class="ae-panel">${head}<div class="ae-empty"><strong>${esc(m.message)}</strong>看板脚本版本过旧，刷新页面后重新加载</div></div>`;
   }
 
   const grids = data.grids || [];
