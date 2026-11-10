@@ -57,7 +57,10 @@ function sampleMek() {
     id, name: id, category, categoryName, dimension: 'minecraft:overworld', pos: [12, 64, -8], active,
     progress: { ticks: 120, required: 400, percent: 30 },
     energy: { stored: 12000, max: 100000 },
-    items: { slots: 8, used: 3, count: 45, first: 'minecraft:iron_ore' },
+    items: { slots: 8, used: 3, count: 45, first: 'minecraft:iron_ore', types: 2, stacks: [
+      { id: 'minecraft:iron_ore', name: 'Iron Ore', count: 32, slots: 2 },
+      { id: 'minecraft:coal', name: 'Coal', count: 13, slots: 1 }
+    ] },
     fluids: { amount: 8000, capacity: 16000, first: 'minecraft:water' },
     chemicals: { amount: 1200, capacity: 8000, first: 'mekanism:oxygen' },
     recipeOutput: 'minecraft:iron_ingot', recipeName: 'Iron Ingot',
@@ -149,6 +152,8 @@ async function main() {
     machineCards: (html.match(/class="machine-card/g) || []).length,
     categoryTabs: (html.match(/class="cat-tab/g) || []).length,
     machineGroups: (html.match(/class="machine-grid"/g) || []).length,
+    itemSlotBlocks: (html.match(/class="mc-slots"/g) || []).length,
+    badges: (html.match(/class="mc-badge"/g) || []).length,
     undefined: (html.match(/undefined/g) || []).length,
     nan: (html.match(/NaN/g) || []).length,
     drivePanel: html.includes('ME 驱动器'),
@@ -159,7 +164,7 @@ async function main() {
   if (!html.length || result.undefined || result.nan) process.exitCode = 1;
   if (mockDrive && (!result.driveCards || result.slots < 10 || result.capacityBars < 3 || result.unknownIcons)) process.exitCode = 1;
   if (mockMissing && !result.missingPanel) process.exitCode = 1;
-  if (mockMek && (!result.machineCards || !result.categoryTabs || !result.machineGroups)) process.exitCode = 1;
+  if (mockMek && (!result.machineCards || !result.categoryTabs || !result.machineGroups || !result.itemSlotBlocks || !result.badges)) process.exitCode = 1;
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });

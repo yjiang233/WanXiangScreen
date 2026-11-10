@@ -179,9 +179,10 @@ public final class MekScanner
         try
         {
             List<IInventorySlot> slots = tile.getInventorySlots(null);
+            Map<String, long[]> byId = new LinkedHashMap<>();
+            Map<String, String> names = new LinkedHashMap<>();
             int used = 0;
             long count = 0;
-            String first = null;
             for (IInventorySlot slot : slots)
             {
                 if (slot == null) continue;
@@ -189,13 +190,33 @@ public final class MekScanner
                 if (stack == null || stack.isEmpty()) continue;
                 used++;
                 count += stack.getCount();
-                if (first == null) first = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                long[] aggregate = byId.computeIfAbsent(id, key -> new long[2]);
+                aggregate[0] += stack.getCount();
+                aggregate[1]++;
+                names.putIfAbsent(id, stack.getHoverName().getString());
             }
+
+            List<Map<String, Object>> stacks = new ArrayList<>();
+            byId.entrySet().stream()
+                    .sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]))
+                    .limit(8)
+                    .forEach(entry -> {
+                        Map<String, Object> stack = new LinkedHashMap<>();
+                        stack.put("id", entry.getKey());
+                        stack.put("name", names.get(entry.getKey()));
+                        stack.put("count", entry.getValue()[0]);
+                        stack.put("slots", entry.getValue()[1]);
+                        stacks.add(stack);
+                    });
+
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("slots", slots == null ? 0 : slots.size());
             value.put("used", used);
             value.put("count", count);
-            value.put("first", first);
+            value.put("first", byId.isEmpty() ? null : byId.keySet().iterator().next());
+            value.put("types", byId.size());
+            value.put("stacks", stacks);
             machine.put("items", value);
         }
         catch (Throwable ignored) {}

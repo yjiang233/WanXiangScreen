@@ -277,17 +277,12 @@ function machineCard(m) {
   const energy = m.energy;
   const energyPct = energy && energy.max ? Math.min(100, Math.round(energy.stored / energy.max * 100)) : 0;
   const pos = m.pos ? m.pos.join(', ') : '—';
-  const meta = [];
-  if (m.items && m.items.slots) meta.push(`物品 ${m.items.used}/${m.items.slots}`);
-  if (m.fluids) meta.push(`流体 ${short(m.fluids.amount)}/${short(m.fluids.capacity)}`);
-  if (m.chemicals) meta.push(`化学品 ${short(m.chemicals.amount)}/${short(m.chemicals.capacity)}`);
-  if (m.recipeOutput) meta.push(`产出 ${zhName(m.recipeOutput, m.recipeName)}`);
-  if (mb && mb.formed) meta.push(`结构 ${num(mb.volume)} 格`);
   const tip = [
     name, m.id, `${m.dimension || '—'} · ${pos}`, `${status} · ${m.categoryName || ''}`,
     progress ? `加工 ${progress.ticks}/${progress.required} tick · ${progress.percent}%` : '',
     energy ? `能量 ${num(energy.stored)} / ${num(energy.max)} J` : '',
-    m.items ? `物品槽 ${m.items.used}/${m.items.slots} · ${num(m.items.count)} 个` : '',
+    m.items ? `物品槽 ${m.items.used}/${m.items.slots} · ${num(m.items.types || 0)} 种 / ${num(m.items.count)} 个` : '',
+    ...(m.items?.stacks || []).slice(0, 6).map((s) => `  ${zhName(s.id, s.name)} ×${num(s.count)}`),
     m.fluids ? `流体 ${num(m.fluids.amount)}/${num(m.fluids.capacity)}${m.fluids.first ? ' · ' + m.fluids.first : ''}` : '',
     m.chemicals ? `化学品 ${num(m.chemicals.amount)}/${num(m.chemicals.capacity)}${m.chemicals.first ? ' · ' + m.chemicals.first : ''}` : '',
     mb ? `多方块 ${mb.formed ? '已成型' : '未成型'} · ${num(mb.volume || 0)} 格` : '',
@@ -301,8 +296,50 @@ function machineCard(m) {
     <div class="mc-state">${esc(status)} · ${esc(pos)}</div>
     ${progress ? `<div class="mc-line"><span>进度</span><div class="bar"><i style="width:${progress.percent}%"></i></div><b>${progress.percent}%</b></div>` : ''}
     ${energy ? `<div class="mc-line"><span>能量</span><div class="bar"><i class="energy" style="width:${energyPct}%"></i></div><b>${short(energy.stored)}/${short(energy.max)}</b></div>` : ''}
-    <div class="mc-meta">${meta.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+    ${machineItems(m)}${machineBadges(m)}
   </div>`;
+}
+
+function fluidIcon(id) {
+  const buckets = { 'minecraft:water': 'minecraft:water_bucket', 'minecraft:lava': 'minecraft:lava_bucket' };
+  return buckets[id] || (state.icons[id] ? id : 'mekanism:basic_fluid_tank');
+}
+
+function machineItems(m) {
+  const items = m.items;
+  if (!items || !items.slots) return '';
+  const stacks = items.stacks || [];
+  const cells = [];
+  for (const stack of stacks) {
+    const label = zhName(stack.id, stack.name);
+    cells.push(`<div class="slot"${tipAttr(`${label}\n${stack.id}\n${num(stack.count)} 个 · ${num(stack.slots)} 槽`)}>${icon(stack.id)}<span class="count">${esc(short(stack.count))}</span></div>`);
+  }
+  if (!cells.length) cells.push('<div class="slot"></div>');
+  return `<div class="mc-block">
+    <div class="mc-label">物品 ${items.used}/${items.slots} · ${num(items.types || stacks.length)} 种</div>
+    <div class="mc-slots">${cells.join('')}</div>
+  </div>`;
+}
+
+function machineBadges(m) {
+  const badges = [];
+  if (m.recipeOutput) {
+    const label = zhName(m.recipeOutput, m.recipeName);
+    badges.push(`<div class="mc-badge"${tipAttr(`当前产出\n${label}\n${m.recipeOutput}`)}>${icon(m.recipeOutput)}<span>${esc(label)}</span></div>`);
+  }
+  if (m.fluids) {
+    const label = `${short(m.fluids.amount)}/${short(m.fluids.capacity)}`;
+    badges.push(`<div class="mc-badge"${tipAttr(`流体 ${m.fluids.first || '空'}\n${num(m.fluids.amount)} / ${num(m.fluids.capacity)} mB`)}>${icon(fluidIcon(m.fluids.first))}<span>${esc(label)}</span></div>`);
+  }
+  if (m.chemicals) {
+    const label = `${short(m.chemicals.amount)}/${short(m.chemicals.capacity)}`;
+    badges.push(`<div class="mc-badge"${tipAttr(`化学品 ${m.chemicals.first || '空'}\n${num(m.chemicals.amount)} / ${num(m.chemicals.capacity)} mB`)}>${icon('mekanism:basic_chemical_tank')}<span>${esc(label)}</span></div>`);
+  }
+  const mb = m.multiblock;
+  if (mb && mb.formed) {
+    badges.push(`<div class="mc-badge"${tipAttr(`多方块已成型 · ${num(mb.volume)} 格`)}>${icon('mekanism:dynamic_tank')}<span>${num(mb.volume)} 格</span></div>`);
+  }
+  return badges.length ? `<div class="mc-badges">${badges.join('')}</div>` : '';
 }
 
 function renderDetected(list) {

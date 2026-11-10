@@ -10,7 +10,7 @@
 | --- | --- |
 | AE2 · ME 网络工作状态：库存（图标 + 数量角标）、能量、节点数、可合成标记 | 已实现 |
 | AE2 · ME 驱动器 10 槽、存储元件类型 / 数量 / 容量 / 状态灯 | 已实现 |
-| Mekanism · 机器状态按功能分类，含运行/待机/未成型、加工进度、能量、物品/流体/化学品储罐、配方产物、多方块指标 | 已实现 |
+| Mekanism · 机器状态按功能分类，含运行/待机/未成型、加工进度、能量、物品图标槽位、配方产物、流体/化学品储罐、多方块指标 | 已实现 |
 | 通用 FE 电量聚合、更多科技模组机器状态、历史趋势与阈值告警 | 规划中 |
 
 NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
@@ -47,7 +47,8 @@ NeoForge 1.21.1 · ModDevGradle 2.0.91 · JDK 21 · Gradle 8.14.2
 
 `data.mekanism` 含 `machines[]`（每台机器的 `category` / `active` / `progress` / `energy` /
 `items` / `fluids` / `chemicals` / `recipeOutput` / `multiblock`）、`categories[]`（分类统计）、
-`total`、`running`。分类规则集中在 `MekScanner.CATEGORY_RULES`，按机器 ID 关键词匹配。
+`total`、`running`。`items.stacks[]` 按物品聚合（最多 8 种，含 `id` / `name` / `count` / `slots`），
+供看板渲染真实物品图标与数量角标。分类规则集中在 `MekScanner.CATEGORY_RULES`，按机器 ID 关键词匹配。
 
 配置在 `<游戏目录>/config/wanxiangscreen-common.toml`：`token`（鉴权，空=不校验）、
 `watchedMods`（关注的模组 ID）、`simulateMissing`（模拟依赖未安装）、`refreshTicks`（快照间隔，默认 20 tick）。
@@ -79,7 +80,7 @@ Mekanism 同样放几台带能量的机器即可：
 /give @s mekanism:basic_crushing_factory
 ```
 
-给机器通电并投入原料后，看板按「工厂机器 / 加工机器 / 能源与电网 / 核反应堆 / 多方块结构 / 储罐与仓储 / 物流管道 / 采矿设备」分组，每台显示状态灯、进度条、能量条与容器概要；点击分类标签可筛选。
+给机器通电并投入原料后，看板按「工厂机器 / 加工机器 / 能源与电网 / 核反应堆 / 多方块结构 / 储罐与仓储 / 物流管道 / 采矿设备」分组，每台显示状态灯、进度条、能量条、物品图标槽位（带数量角标）、配方产物图标与流体/化学品图标徽章；点击分类标签可筛选。
 
 验证「未安装」有两种方式：
 
