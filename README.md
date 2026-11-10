@@ -104,7 +104,7 @@ Mekanism 同样放几台带能量的机器即可：
 `dashboard/assets/` 全部提取自本地官方 jar，看板运行时不依赖外网：
 
 - `gui/` — AE2 的 `terminal.png`、`drive.png`、`states.png` 等；`slot.png` 是从终端 GUI 精确裁出的 18×18 槽位底图
-- `tex/` — Minecraft / AE2 / Mekanism 的物品、方块、部件贴图，按模型 JSON 的 parent 链解析（兼容 `front` / `base` 等自定义键，并对 `builtin/entity` 模型做同名贴图兜底），共 2484 项映射
+- `tex/` — Minecraft / AE2 / Mekanism 的物品、方块、部件贴图，按模型 JSON 的 parent 链解析（兼容 `front` / `base` 等自定义键，并对 `builtin/entity` 模型做同名贴图兜底），共 2483 项映射
 - `icon-map.json` — 物品 ID → 贴图路径；`lang-zh.json` — 合并 AE2 与 Mekanism 的简体中文名，共 4256 条
 
 升级联动模组或 Minecraft 版本后重新生成：
