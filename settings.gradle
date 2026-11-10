@@ -1,0 +1,19 @@
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        maven { url = 'https://neoforged.forgecdn.net/releases' }
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+gradle.lifecycle.beforeProject { project ->
+    project.repositories.withType(org.gradle.api.artifacts.repositories.MavenArtifactRepository).configureEach { repo ->
+        if (repo.url.toString().contains('maven.neoforged.net')) {
+            repo.url = 'https://neoforged.forgecdn.net/releases'
+        }
+    }
+}
