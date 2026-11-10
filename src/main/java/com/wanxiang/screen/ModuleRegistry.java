@@ -26,6 +26,7 @@ public final class ModuleRegistry
 
     public static Map<String, Object> build(MinecraftServer server)
     {
+        ScreenConfig.reload();
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("service", "wanxiangscreen");
         root.put("updatedAt", System.currentTimeMillis());
